@@ -1,0 +1,12 @@
+name: nginx-tutorial
+
+services:
+  nginx:
+    image: nginx
+    container_name: nginx-web
+    restart: always
+    ports:
+      - 8080:8080
+    volumes:
+      - ./html:/usr/share/nginx/html
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
