@@ -4,7 +4,7 @@
 
 - [Nginx - Reverse Proxy](#nginx---reverse-proxy)
   - [FastAPI App](#fastapi-app)
-    - [Docker Compose](#docker-compose)
+  - [Docker Compose](#docker-compose)
   - [Nginx Configuration](#nginx-configuration)
 
 ---
@@ -33,7 +33,7 @@ if __name__ == "__main__":
 
 ---
 
-### Docker Compose
+## Docker Compose
 
 ```yaml
 services:
