@@ -3,315 +3,818 @@
 [Back](../README.md)
 
 - [Nginx - Web Server](#nginx---web-server)
-  - [Docker](#docker)
-  - [Nginx Configuration - Web Server](#nginx-configuration---web-server)
-    - [Virtual Servers](#virtual-servers)
-    - [Server configuration block](#server-configuration-block)
-      - [Listen Directive](#listen-directive)
-      - [Locations directive](#locations-directive)
-      - [Location Priority](#location-priority)
-      - [Location Context](#location-context)
-    - [Use Variables](#use-variables)
-    - [Return Directive](#return-directive)
-    - [Rewrite Directive](#rewrite-directive)
-    - [sub\_filter directive: Rewrite HTTP Responses](#sub_filter-directive-rewrite-http-responses)
-    - [error\_page directive: Handle Errors](#error_page-directive-handle-errors)
+  - [Common Directives](#common-directives)
+    - [Lab: Return a Custom message](#lab-return-a-custom-message)
+    - [Lab: Custom HTML](#lab-custom-html)
+    - [Lab: Include MIME Type](#lab-include-mime-type)
+    - [Lab: Include `*.conf`](#lab-include-conf)
+    - [Lab: Temp Redirect `return 307`](#lab-temp-redirect-return-307)
+    - [Lab: Temp Redirect without changing url `rewrite`](#lab-temp-redirect-without-changing-url-rewrite)
+    - [Lab: Multiple Index Files](#lab-multiple-index-files)
+    - [Lab: Define 404 html](#lab-define-404-html)
+  - [Location](#location)
+    - [Processing Order (Priority)](#processing-order-priority)
+    - [Lab: Location](#lab-location)
+      - [Prefix Match (no modifier)](#prefix-match-no-modifier)
+      - [Exact Match](#exact-match)
+      - [Regex](#regex)
+      - [Regex Case Insensitive](#regex-case-insensitive)
 
 ---
 
-## Docker
+## Common Directives
 
-- Default
+Server Block Configuration
+
+| Directive                     | Desc                                    |
+| ----------------------------- | --------------------------------------- |
+| `server { }`                  | Define a virtual server                 |
+| `listen 80;`                  | Port to listen on (80, 443, 8080, etc.) |
+| `server_name example.com;`    | Domain names this server responds to    |
+| `root /var/www/html;`         | Document root directory                 |
+| `index index.html index.php;` | Default files to serve                  |
+
+- Location Matching
+
+| Location                        | Desc                           |
+| ------------------------------- | ------------------------------ |
+| `location / { }`                | Match all requests             |
+| `location /api/ { }`            | Match specific paths           |
+| `location ~ \.php$ { }`         | Regex match (case sensitive)   |
+| `location ~* \.(jpg\|png)$ { }` | Regex match (case insensitive) |
+| `location = /favicon.ico { }`   | Exact match                    |
+
+- File Handling
+
+| Directive                      | Desc                                         |
+| ------------------------------ | -------------------------------------------- |
+| `try_files $uri $uri/ =404;`   | Try files in order, return 404 if none found |
+| `autoindex on;`                | Enable directory listing                     |
+| `expires 30d;`                 | Set cache expiration headers                 |
+| `add_header X-Custom "value";` | Add custom HTTP headers                      |
+
+- Request Processing
+
+| Directive                    | Desc                      |
+| ---------------------------- | ------------------------- |
+| `client_max_body_size 100M;` | Maximum upload size       |
+| `client_body_timeout 60s;`   | Upload timeout            |
+| `keepalive_timeout 65;`      | Connection keepalive time |
+| `send_timeout 60s;`          | Response send timeout     |
+
+- SSL/HTTPS
+
+| Directive                            | Desc                     |
+| ------------------------------------ | ------------------------ |
+| `ssl_certificate /path/cert.pem;`    | SSL certificate file     |
+| `ssl_certificate_key /path/key.pem;` | SSL private key          |
+| `ssl_protocols TLSv1.2 TLSv1.3;`     | Allowed SSL protocols    |
+| `ssl_ciphers HIGH:!aNULL:!MD5;`      | SSL cipher configuration |
+
+- Logging
+
+| Directive                                | Desc                |
+| ---------------------------------------- | ------------------- |
+| `access_log /var/log/nginx/access.log;`  | Access log location |
+| `error_log /var/log/nginx/error.log;`    | Error log location  |
+| `log_format combined '$remote_addr...';` | Custom log format   |
+
+- Redirects and Rewrites
+
+| Directive                                     | Desc               |
+| --------------------------------------------- | ------------------ |
+| `return 301 https://example.com$request_uri;` | Permanent redirect |
+| `rewrite ^/old-url$ /new-url permanent;`      | URL rewriting      |
+| `error_page 404 /404.html;`                   | Custom error pages |
+
+- Proxy and Load Balancing
+
+| Directive                                            | Desc                        |
+| ---------------------------------------------------- | --------------------------- |
+| `proxy_pass http://backend;`                         | Forward requests to backend |
+| `proxy_set_header Host $host;`                       | Pass original host header   |
+| `upstream backend {server ip:port; server ip:port;}` | Define backend servers      |
+
+- Security and Access Control
+
+| Directive                           | Desc                        |
+| ----------------------------------- | --------------------------- |
+| `allow 192.168.1.0/24;`             | Allow specific IP range     |
+| `deny all;`                         | Deny all other IPs          |
+| `auth_basic "Restricted Area";`     | Enable basic authentication |
+| `auth_basic_user_file /etc/passwd;` | Password file location      |
+
+- Performance Optimization
+
+| Directive                         | Desc                       |
+| --------------------------------- | -------------------------- |
+| `gzip on;`                        | Enable compression         |
+| `gzip_types text/plain text/css;` | File types to compress     |
+| `sendfile on;`                    | Efficient file serving     |
+| `tcp_nopush on;`                  | Optimize packet sending    |
+| `worker_processes auto;`          | Number of worker processes |
+
+- Rate Limiting
+
+| Directive                                                    | Desc                   |
+| ------------------------------------------------------------ | ---------------------- |
+| `limit_req_zone $binary_remote_addr zone=api:10m rate=1r/s;` | Define rate limit zone |
+| `limit_req zone=api burst=5;`                                | Apply rate limiting    |
+| `limit_conn_zone $binary_remote_addr zone=conn:10m;`         | Connection limiting    |
+
+---
+
+### Lab: Return a Custom message
 
 ```sh
-# default
-docker run -it -d --rm -p 8080:80 --name web nginx
+# backup default cf
+sudo mv /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak
 
-docker stop web
-```
+# set up virtual host
+sudo tee /etc/nginx/nginx.conf<<EOF
+events{}
 
-![web](./pic/web01.png)
+http {
+  server {
+    listen 80;
+    server_name localhost;
 
-- Customer Page
-
-  - Default directory:
-    - `/usr/share/nginx/html`
-
-- Develope Example
-
-```yaml
-services:
-  nginx:
-    image: nginx
-    container_name: nginx-web
-    restart: always
-    ports:
-      - 8080:80
-    volumes:
-      - ./html:/usr/share/nginx/html # custom html
-      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro # nginx cf
-```
-
----
-
-## Nginx Configuration - Web Server
-
-### Virtual Servers
-
-- configuration file must include **at least one** server directive to define a `virtual server`.
-- defined by a server directive in the http context
-- can add multiple server directives into the http context to define multiple virtual servers.
-
-  ```conf
-  http {
-      server {
-          # Server configuration
-      }
+    return 200 "This is a return.\n";
   }
-  ```
-
----
-
-### Server configuration block
-
-#### Listen Directive
-
-- specify the **IP address** and **port** (or Unix domain socket and path) on which the server listens for requests.
-- Both IPv4 and IPv6 addresses are accepted; enclose IPv6 addresses in square brackets.
-- Example:
-
-```conf
-server {
-    listen 127.0.0.1:8080;
-    # Additional server configuration
 }
-```
+EOF
 
-- Default
+sudo nginx -t && sudo nginx -s reload
+sudo systemctl restart nginx
 
-  - If an **address** is **omitted**, the server listens on **all addresses**.
-  - If a `port` is **omitted**, the `standard port` is used.
-    - the **“standard” port** is `80/tcp` and the **“default” port** is `8000/tcp`, depending on superuser privileges.
-
-- If there are **several servers** that **match** the `IP address` and **port** of the request, NGINX Plus tests the request’s **Host header** field against the `server_name` directives in the server blocks.
-
-- Example: listens on all addresses and serveral servers.
-
-```conf
-server {
-    listen      80;
-    server_name example.org www.example.org;
-    #...
-}
+curl -v localhost
+# * Host localhost:80 was resolved.
+# * IPv6: ::1
+# * IPv4: 127.0.0.1
+# *   Trying [::1]:80...
+# * connect to ::1 port 80 from ::1 port 35138 failed: Connection refused
+# *   Trying 127.0.0.1:80...
+# * Connected to localhost (127.0.0.1) port 80
+# > GET / HTTP/1.1
+# > Host: localhost
+# > User-Agent: curl/8.5.0
+# > Accept: */*
+# >
+# < HTTP/1.1 200 OK
+# < Server: nginx/1.24.0 (Ubuntu)
+# < Date: Thu, 26 Jun 2025 22:42:26 GMT
+# < Content-Type: text/plain
+# < Content-Length: 18
+# < Connection: keep-alive
+# <
+# This is a return.
+# * Connection #0 to host localhost left intact
 ```
 
 ---
 
-#### Locations directive
+### Lab: Custom HTML
 
-- Used to send traffic to different proxies or serve different files based on the request URIs.
+- `root`: Specify the root of index file
+- `index`: Define Default files
 
-- location directive parameter types:
+```sh
+# create an index html
+sudo mkdir -vp /var/www/localhost
 
-  - prefix strings(pathnames): must start with the prefix string.
-  - regular expressions: preceded with the tilde (`~`) for **case-sensitive** matching, or the tilde-asterisk (`~*`) for **case-insensitive** matching.
+sudo tee /var/www/localhost/index.html <<EOF
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Hello, Nginx!</title>
+</head>
+<body>
+    <h1>Hello, Nginx!</h1>
+    <p>We have just configured our Nginx web server on Ubuntu Server!</p>
+</body>
+</html>
+EOF
 
-- Example:
+# backup default cf
+sudo mv /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak
 
-```conf
-# prefix strings
-location /some/path/ {
-    #...
-}
+# set up virtual host
+sudo tee /etc/nginx/nginx.conf<<EOF
+events{}
 
-# regular expressions
-location ~ \.html? {
-    #...
-}
-```
+http {
+  server {
+    listen 80;
+    server_name localhost;
 
----
-
-#### Location Priority
-
-- NGINX Plus **first** compares the URI to the locations with a `prefix string`. It **then** searches the locations with a `regular expression`.
-- Higher priority is given to `regular expressions`, unless the `^~` modifier is used.
-- Among the `prefix strings` NGINX Plus selects the **most specific one** (that is, the longest and most complete string).
-- The logic for selecting a location:
-
-  - 1. Test the URI against all `prefix strings`.
-  - 2. The = (equals sign) modifier defines an exact match of the URI and a `prefix string`.
-    - If the exact match is found, the search stops.
-  - 3. If the `^~` (caret-tilde) modifier prepends the longest matching `prefix string`, the regular expressions are not checked.
-  - 4. Store the longest matching `prefix string`.
-  - 5. Test the URI against `regular expressions`.
-  - 6. Stop processing when the first matching `regular expression` is found and use the corresponding location.
-  - 7. If no `regular expression` matches, use the location corresponding to the stored prefix string.
-
-- A typical use case for the `=` modifier is requests for `/` (forward slash).
-  - If requests for `/` are frequent, specifying `= /` as the parameter to the `location directive` **speeds up processing**, because the search for matches **stops** after the first comparison.
-  ```conf
-  location = / {
-      #...
+    root /var/www/localhost;
+    index index.html index.php;
   }
-  ```
-
----
-
-#### Location Context
-
-- `location context`
-  - contain directives that define **how to resolve a request**
-    - either serve a **static file**
-    - or **pass** the request to a **proxied server**.
-- Example
-
-```conf
-server {
-    location /images/ {
-        root /data;  # files from the /data directory
-    }
-
-    location / {
-        proxy_pass http://www.example.com; # passed to the proxied server that hosts content for the <www.example.com> domain.
-    }
 }
+EOF
+
+sudo nginx -t && sudo nginx -s reload
+sudo systemctl restart nginx
+
+curl -v localhost
+# * Host localhost:80 was resolved.
+# * IPv6: ::1
+# * IPv4: 127.0.0.1
+# *   Trying [::1]:80...
+# * connect to ::1 port 80 from ::1 port 50598 failed: Connection refused
+# *   Trying 127.0.0.1:80...
+# * Connected to localhost (127.0.0.1) port 80
+# > GET / HTTP/1.1
+# > Host: localhost
+# > User-Agent: curl/8.5.0
+# > Accept: */*
+# >
+# < HTTP/1.1 200 OK
+# < Server: nginx/1.24.0 (Ubuntu)
+# < Date: Thu, 26 Jun 2025 22:47:55 GMT
+# < Content-Type: text/html
+# < Content-Length: 222
+# < Last-Modified: Thu, 26 Jun 2025 22:47:31 GMT
+# < Connection: keep-alive
+# < ETag: "685dce03-de"
+# < Accept-Ranges: bytes
+# <
+# <!doctype html>
+# <html>
+# <head>
+#     <meta charset="utf-8">
+#     <title>Hello, Nginx!</title>
+# </head>
+# <body>
+#     <h1>Hello, Nginx!</h1>
+#     <p>We have just configured our Nginx web server on Ubuntu Server!</p>
+# </body>
+# </html>
+# * Connection #0 to host localhost left intact
 ```
 
-> in response to a request for `/images/example.png`, NGINX Plus delivers the file `/data/images/example.png`.
-> all requests with URIs that do **not start** with `/images/` are be passed to the proxied server.
-
 ---
 
-### Use Variables
+### Lab: Include MIME Type
 
-- A variable is denoted by the `$` (dollar) sign at the beginning of its name.
-- Variables define information based upon NGINX’s state, such as the properties of the request being currently processed.
+```sh
+# create an index html
+sudo mkdir -vp /var/www/localhost
 
-- `predefined variables`
-  - such as the core HTTP variables
-- can define custom variables using the **set**, **map**, and **geo** directives.
-- Most variables are computed at runtime and contain information related to a specific request.
-  - For example, `$remote_addr` contains the **client IP address** and `$uri` holds the current **URI value**.
+# add stylesheet
+sudo tee /var/www/localhost/index.html <<EOF
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Hello, Nginx!</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Hello, Nginx!</h1>
+    <p>We have just configured our Nginx web server on Ubuntu Server!</p>
+</body>
+</html>
+EOF
 
----
+# add style.css
+sudo tee /var/www/localhost/style.css <<EOF
+body {
+  background-color: powderblue;
+}
+EOF
 
-### Return Directive
+# backup default cf
+sudo mv /etc/nginx/nginx.conf /etc/nginx/nginx.conf.bak
 
-- Some website URIs require immediate return of a response with a **specific error** or redirect code, for example when a page has been moved temporarily or permanently.
+# set up virtual host, add include mime type
+sudo tee /etc/nginx/nginx.conf<<EOF
+events{}
 
-  - The easiest way to do this is to use the `return directive`.
-  - For example:
+http {
 
-  ```conf
-  location /wrong/url {
-      return 404;
+  include /etc/nginx/mime.types;
+
+  server {
+    listen 80;
+    server_name localhost;
+
+    root /var/www/localhost;
+    index index.html index.php;
   }
-  ```
+}
+EOF
 
-- The **first** parameter of return is a **response code**. The **optional second** parameter can be the **URL** of a redirect (for codes 301, 302, 303, and 307) or the text to return in the response body
-  - example:
-  ```conf
-  location /permanently/moved/url {
-      return 301 http://www.example.com/moved/here;
-  }
-  ```
+sudo nginx -t && sudo nginx -s reload
+sudo systemctl restart nginx
+```
+
+- http://localhost
+  - Must include MIME in the http; Otherwise, css file will be treated as text/plain
+
+![pic](./pic/pic01.png)
 
 ---
 
-### Rewrite Directive
+### Lab: Include `*.conf`
 
-- Used to modify a request URI during request processing.
-- can include multiple rewrite directives in both the server and location contexts.
-- 3 parameters:
+```sh
+# backup if applied
+sudo mv /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf.bak
 
-  - 1st param: the regular expression that the request URI must match.
-  - 2n param: the URI to substitute for the matching URI.
-  - 3rd para: optional, a flag that can halt processing of further rewrite directives or send a redirect (code 301 or 302).
+# add include
+sudo tee /etc/nginx/nginx.conf<<EOF
+events{}
 
-- Example:
+http {
+  include /etc/nginx/mime.types;
+  include /etc/nginx/conf.d/*.conf;
 
-```conf
-location /users/ {
-    rewrite ^/users/(.*)$ /show?user=$1 break;
 }
-```
+EOF
 
----
-
-### sub_filter directive: Rewrite HTTP Responses
-
-- `sub_filter` directive
-
-  - used to rewrite or change the content in an HTTP response, substituting one string for another.
-
-- Example:
-
-```conf
-location / {
-    sub_filter      /blog/ /blog-staging/;
-    sub_filter_once off;
-}
-```
-
-```conf
-location / {
-    sub_filter     'href="http://127.0.0.1:8080/'    'href="https://$host/';
-    sub_filter     'img src="http://127.0.0.1:8080/' 'img src="https://$host/';
-    sub_filter_once on;
-}
-```
-
-> changes the scheme from `http://` to `https://` and **replaces** the localhost address with the hostname from the request header field.
-> The `sub_filter_once` directive tells NGINX to apply `sub_filter` directives **consecutively** within a location
-
----
-
-### error_page directive: Handle Errors
-
-- `error_page` directive
-
-  - used to return a **custom page** along with an error code, substitute a different error code in the response, or redirect the browser to a different URI.
-
-- The error code can come from a proxied server or occur during processing
-
-- Example:
-
-```conf
-error_page 404 /404.html;
-```
-
-> specifies the page (/404.html) to return with the 404 error code.
-
-```conf
-location /old/path.html {
-    error_page 404 =301 http:/example.com/new/path.html;
-}
-```
-
-> when NGINX Plus cannot find a page, it substitutes code 301 for code 404, and redirects the client to http:/example.com/new/path.html.
-
-```conf
+# create new cf in conf.d
+sudo tee /etc/nginx/conf.d/default.conf<<EOF
 server {
-    ...
-    location /images/ {
-        # Set the root directory to search for the file
-        root /data/www;
+  listen 80;
+  server_name localhost;
 
-        # Disable logging of errors related to file existence
-        open_file_cache_errors off;
-
-        # Make an internal redirect if the file is not found
-        error_page 404 = /fetch$uri;
-    }
-
-    location /fetch/ {
-        proxy_pass http://backend/;
-    }
+  root /var/www/localhost;
+  index index.html index.php;
 }
+EOF
+
+sudo nginx -t && sudo nginx -s reload
+sudo nginx -T   # show all cf with all included cf
 ```
 
-> passing a request to the back end when a file is not found. Because there is no status code specified after the equals sign in the error_page directive, the response to the client has the status code returned by the proxied server (not necessarily 404).
-> `$uri` variable in the final parameter to the error_page directive holds the URI of the current request, which gets passed in the redirect.
+---
+
+### Lab: Temp Redirect `return 307`
+
+- Redirection will change the url
+
+```sh
+sudo tee /etc/nginx/conf.d/default.conf<<EOF
+server {
+  listen 80;
+  server_name localhost;
+
+  root /var/www/localhost;
+
+  location /temp {
+    return 307 /app/index.html;
+  }
+}
+EOF
+
+sudo nginx -t && sudo nginx -s reload
+
+curl -i http://localhost/temp
+# HTTP/1.1 307 Temporary Redirect
+# Server: nginx/1.24.0 (Ubuntu)
+# Date: Fri, 27 Jun 2025 05:37:19 GMT
+# Content-Type: text/html
+# Content-Length: 180
+# Location: http://localhost/app/index.html
+# Connection: keep-alive
+
+# <html>
+# <head><title>307 Temporary Redirect</title></head>
+# <body>
+# <center><h1>307 Temporary Redirect</h1></center>
+# <hr><center>nginx/1.24.0 (Ubuntu)</center>
+# </body>
+# </html>
+```
+
+---
+
+### Lab: Temp Redirect without changing url `rewrite`
+
+```sh
+sudo tee /etc/nginx/conf.d/default.conf<<EOF
+server {
+  listen 80;
+  server_name localhost;
+
+  root /var/www/localhost;
+  rewrite /temp /app/index.html;
+}
+EOF
+
+sudo nginx -t && sudo nginx -s reload
+
+curl -i http://localhost/temp
+# HTTP/1.1 200 OK
+# Server: nginx/1.24.0 (Ubuntu)
+# Date: Fri, 27 Jun 2025 05:40:23 GMT
+# Content-Type: text/html
+# Content-Length: 267
+# Last-Modified: Fri, 27 Jun 2025 03:30:10 GMT
+# Connection: keep-alive
+# ETag: "685e1042-10b"
+# Accept-Ranges: bytes
+
+# <!doctype html>
+# <html>
+# <head>
+#     <meta charset="utf-8">
+#     <title>Hello, Nginx!</title>
+#     <link rel="stylesheet" href="style.css">
+# </head>
+# <body>
+#     <h1>Hello, Nginx!</h1>
+#     <p>We have just configured our Nginx web server on Ubuntu Server!</p>
+# </body>
+# </html>
+```
+
+> response code is 200, other than 307.
+> no location shows.
+
+---
+
+### Lab: Multiple Index Files
+
+- add_header: add uri value for debug
+
+```sh
+sudo cp /var/www/localhost/app/index.html /var/www/localhost/index.html
+
+sudo tee /etc/nginx/conf.d/default.conf<<EOF
+server {
+  listen 80;
+  server_name localhost;
+
+  root /var/www/localhost;
+  index index.html;
+
+  location / {
+    add_header X-debug-uri "\$uri";
+    try_files \$uri \$uri/ =404;
+  }
+}
+EOF
+
+sudo nginx -t && sudo nginx -s reload
+
+curl -i http://localhost/
+# HTTP/1.1 200 OK
+# Server: nginx/1.24.0 (Ubuntu)
+# Date: Fri, 27 Jun 2025 05:53:20 GMT
+# Content-Type: text/html
+# Content-Length: 267
+# Last-Modified: Fri, 27 Jun 2025 05:47:04 GMT
+# Connection: keep-alive
+# ETag: "685e3058-10b"
+# X-debug-uri: /index.html
+# Accept-Ranges: bytes
+
+# <!doctype html>
+# <html>
+# <head>
+#     <meta charset="utf-8">
+#     <title>Hello, Nginx!</title>
+#     <link rel="stylesheet" href="style.css">
+# </head>
+# <body>
+#     <h1>Hello, Nginx!</h1>
+#     <p>We have just configured our Nginx web server on Ubuntu Server!</p>
+# </body>
+# </html>
+
+curl -i http://localhost/app
+# HTTP/1.1 301 Moved Permanently
+# Server: nginx/1.24.0 (Ubuntu)
+# Date: Fri, 27 Jun 2025 05:54:10 GMT
+# Content-Type: text/html
+# Content-Length: 178
+# Location: http://localhost/app/
+# Connection: keep-alive
+# X-debug-uri: /app
+
+# <html>
+# <head><title>301 Moved Permanently</title></head>
+# <body>
+# <center><h1>301 Moved Permanently</h1></center>
+# <hr><center>nginx/1.24.0 (Ubuntu)</center>
+# </body>
+# </html>
+```
+
+---
+
+### Lab: Define 404 html
+
+```sh
+# create 404 html
+sudo tee /var/www/localhost/404.html <<EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Page Not Found</title>
+</head>
+<body>
+  <h1>Oops! Page Not Found</h1>
+  <p>The page you're looking for seems to have wandered off into the digital void.</p>
+  <div>
+    <a href="/">Go Home</a>
+  </div>
+</body>
+</html>
+EOF
+
+# update cf
+sudo tee /etc/nginx/conf.d/default.conf<<EOF
+server {
+  listen 80;
+  server_name localhost;
+
+  root /var/www/localhost;
+  index index.html;
+  error_page 404 /404.html;
+
+  location / {
+    add_header X-debug-uri "\$uri";
+    try_files \$uri \$uri/ =404;
+  }
+}
+EOF
+
+sudo nginx -t && sudo nginx -s reload
+
+curl -i http://localhost/ffdsfad
+# HTTP/1.1 404 Not Found
+# Server: nginx/1.24.0 (Ubuntu)
+# Date: Fri, 27 Jun 2025 06:03:40 GMT
+# Content-Type: text/html
+# Content-Length: 377
+# Connection: keep-alive
+# ETag: "685e340b-179"
+
+# <!DOCTYPE html>
+# <html lang="en">
+# <head>
+#     <meta charset="UTF-8">
+#     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+#     <title>404 - Page Not Found</title>
+# </head>
+# <body>
+#   <h1>Oops! Page Not Found</h1>
+#   <p>The page you're looking for seems to have wandered off into the digital void.</p>
+#   <div>
+#     <a href="/">Go Home</a>
+#   </div>
+# </body>
+# </html>
+```
+
+---
+
+## Location
+
+- Location matches both:
+
+  - URL
+  - html file path
+
+- Example: `location /app` querys the file both with
+  - URL `http://localhost/app`
+  - file path `root_path/app/index.html`
+  - If either does not match, the 404.
+- Regex case insensitive match requires both url and file name match.
+
+---
+
+- `location [modifier] [URI] {}`
+
+- modifiers:
+
+| Modifier | Matched againse the requested URI   | Example                     |
+| -------- | ----------------------------------- | --------------------------- |
+| `none`   | the **beginning**                   | `location /images`          |
+| `=`      | **exactly** match                   | `location = /images`        |
+| `~`      | case-sensitive regular expression   | `location ~ /Images`        |
+| `~*`     | case insensitive regular expression | `location ~* \.(png\|jpg)$` |
+| `^~`     | longest nonregular expression match | `location ^~ /images`       |
+
+---
+
+### Processing Order (Priority)
+
+- Nginx processes location blocks in this specific order:
+  - **Exact Match** (`=`): Highest priority, stops immediately
+  - **Priority Prefix** (`^~`): High priority, stops searching for regex
+  - **Regular Expressions** (`~` and `~\*`): Checked in order of appearance in config
+  - **Prefix Match** (no modifier)： Lowest priority, longest match wins
+
+| Location expression         | Modifier                   | Piority | Desc                                      |
+| --------------------------- | -------------------------- | ------- | ----------------------------------------- |
+| `location = /images`        | Exact Match `=`            | 1       | exact match with the requested url        |
+| `location ^~ /images`       | Priority Prefix\*\* (`^~`) | 2       | Priority prefix, stops searching          |
+| `location ~ /Images`        | Regular Expressions        | 3       | case-sensitive regular expression match   |
+| `location ~* \.(png\|jpg)$` | Regular Expressions        | 3       | case-insensitive regular expression match |
+| `location /images/`         | Prefix Match (none)        | 4       | longest match wins                        |
+| `location /`                | Prefix Match (none)        | 4       | match all requests, used as last resort   |
+
+---
+
+- URL `localhost/app` vs `localhost/app/`
+
+  - `localhost/app`:
+    - At first, nginx try to find the file localhost/app
+    - If not found, then try any file that matches localhost/app\*
+      - If localhost/app is a dir
+        - then try to find the index.html in this dir, and 301 redirect and return matched file.
+      - If localhost/app is not found, but match localhost/apple/ is a dir
+        - then try to find and return index.html in this dir.
+      - Also, it could be the find localhost/app/ppa/index.html, because the prefix of the path matches localhost/app\*
+  - `localhost/app/`: request /app/index.html
+
+---
+
+### Lab: Location
+
+```sh
+# main cf
+sudo tee /etc/nginx/nginx.conf<<EOF
+events{}
+
+http {
+  include /etc/nginx/mime.types;
+  include /etc/nginx/conf.d/*.conf;
+
+}
+EOF
+
+# default.conf
+sudo tee /etc/nginx/conf.d/default.conf<<EOF
+server {
+  listen 80;
+  server_name localhost;
+
+  location / {
+    root /var/www/localhost;
+  }
+}
+EOF
+
+sudo nginx -t && sudo nginx -s reload
+
+# confirm
+curl http://localhost
+# <!doctype html>
+# <html>
+# <head>
+#     <meta charset="utf-8">
+#     <title>Hello, Nginx!</title>
+#     <link rel="stylesheet" href="style.css">
+# </head>
+# <body>
+#     <h1>Hello, Nginx!</h1>
+#     <p>We have just configured our Nginx web server on Ubuntu Server!</p>
+# </body>
+# </html>
+```
+
+---
+
+#### Prefix Match (no modifier)
+
+- `location /app`
+  - It querys file /var/www/localhost/app/index.html
+
+```sh
+sudo tee /etc/nginx/conf.d/default.conf<<EOF
+server {
+  listen 80;
+  server_name localhost;
+
+  location /app {
+    root /var/www/localhost;
+  }
+}
+EOF
+
+sudo nginx -t && sudo nginx -s reload
+
+curl http://localhost
+# return the default nginx page, not custom page
+
+curl http://localhost/app/
+# return 404, because no such file /var/www/localhost/app/index.html
+```
+
+- Solve: move the index.html to /app
+
+```sh
+sudo mkdir -pv /var/www/localhost/app
+sudo mv -v /var/www/localhost/index.html /var/www/localhost/app/index.html
+
+# confirm
+ll /var/www/localhost/app/index.html
+
+curl http://localhost/app
+# <html>
+# <head><title>301 Moved Permanently</title></head>
+# <body>
+# <center><h1>301 Moved Permanently</h1></center>
+# <hr><center>nginx/1.24.0 (Ubuntu)</center>
+# </body>
+# </html>
+
+curl http://localhost/app/
+# <!doctype html>
+# <html>
+# <head>
+#     <meta charset="utf-8">
+#     <title>Hello, Nginx!</title>
+#     <link rel="stylesheet" href="style.css">
+# </head>
+# <body>
+#     <h1>Hello, Nginx!</h1>
+#     <p>We have just configured our Nginx web server on Ubuntu Server!</p>
+# </body>
+# </html>
+
+curl http://localhost/app/index.html
+# <!doctype html>
+# <html>
+# <head>
+#     <meta charset="utf-8">
+#     <title>Hello, Nginx!</title>
+#     <link rel="stylesheet" href="style.css">
+# </head>
+# <body>
+#     <h1>Hello, Nginx!</h1>
+#     <p>We have just configured our Nginx web server on Ubuntu Server!</p>
+# </body>
+# </html>
+```
+
+---
+
+#### Exact Match
+
+- `location = /app/index.html`
+
+```sh
+sudo tee /etc/nginx/conf.d/default.conf<<EOF
+server {
+  listen 80;
+  server_name localhost;
+
+  location = /app/index.html {
+    root /var/www/localhost;
+  }
+}
+EOF
+
+sudo nginx -t && sudo nginx -s reload
+
+curl http://localhost/app  # 404
+curl http://localhost/app/  # 404
+curl http://localhost/app/index.html  # return index
+```
+
+---
+
+#### Regex
+
+- only match 6 to 9 avi flim.
+
+```sh
+sudo tee /etc/nginx/conf.d/default.conf<<EOF
+server {
+  listen 80;
+  server_name localhost;
+
+  location ~ /videos/videos[6-9].avi {
+    root /var/www/localhost;
+  }
+}
+EOF
+```
+
+---
+
+#### Regex Case Insensitive
+
+```sh
+sudo tee /etc/nginx/conf.d/default.conf<<EOF
+server {
+  listen 80;
+  server_name localhost;
+
+  location ~* /videos/videos[6-9].avi {
+    root /var/www/localhost;
+  }
+}
+EOF
+```
 
 ---
