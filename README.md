@@ -21,7 +21,9 @@ A repo to learn nginx.
 
 - Feature
   - [Web Server](./web_server/web_server.md)
-    - [Common Patterns](./web_server/patterns.md)
-  - [Reverse Proxy](./proxy/proxy.md)
+    - Common Patterns
+      - Email
+  - [Reverse Proxy](./reverse_proxy/reverse_proxy.md)
+  - [Load Balancing](./load_balance/load_balance.md)
 
 ---
