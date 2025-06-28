@@ -25,3 +25,4 @@ A repo to learn nginx.
       - Email
   - [Reverse Proxy](./reverse_proxy/reverse_proxy.md)
   - [Load Balancing](./load_balance/load_balance.md)
+  - [Enable HTTPS](./https/https.md)

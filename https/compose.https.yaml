@@ -1,0 +1,44 @@
+services:
+  app01:
+    container_name: app01
+    build: ./app/
+    restart: unless-stopped
+    environment:
+      - APP_NAME=app01
+      - ENV=development
+    volumes:
+      - ./app:/app
+    networks:
+      - app-network
+
+  app02:
+    container_name: app02
+    build: ./app/
+    restart: unless-stopped
+    environment:
+      - APP_NAME=app02
+      - ENV=development
+    volumes:
+      - ./app:/app
+    networks:
+      - app-network
+
+  nginx:
+    container_name: nginx-web
+    image: nginx:latest
+    restart: unless-stopped
+    ports:
+      # - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app01
+      - app02
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
